@@ -7,28 +7,20 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <string.h>
+#include <netdb.h>
 
 #define HOST "127.0.0.1"
 #define DEFAULT_PORT "9090"
 
-/* TO-DO: Add htons or other combination to convert from network byte order to host or vice versa */
-int main(int argc, char *argv[])
-{
-	unsigned short int port;
-	int socket_file_descriptor;
+
+bool isRunning= true;
+
+int init_server(unsigned int port) {
+
 	struct sockaddr_in sock_addr;
-	bool isListening = true;	
-	if (argc < 2) {
-	 printf("Port NOT provided, defaulting to %s \n", DEFAULT_PORT);
-	 port = atoi((char *) DEFAULT_PORT);
-	} else {
+	memset(&sock_addr, 0, sizeof(struct sockaddr_in));
 
-	port = atoi(argv[1]);
-	}
-
-
-	printf("Port that was provided %d \n", port);
-
+	int socket_file_descriptor;
 	socket_file_descriptor = socket(AF_INET, SOCK_STREAM, 0);
 
 	if (socket_file_descriptor < 0) {
@@ -50,7 +42,11 @@ int main(int argc, char *argv[])
 	}
 	
 	listen(socket_file_descriptor, 20);
+	
+	return socket_file_descriptor;
+}
 
+void main_loop(int fd) { 
 	
 	//client TCP config and connection accept
 
@@ -59,10 +55,10 @@ int main(int argc, char *argv[])
 	int client_socket;
 	char client_ip[INET_ADDRSTRLEN];
 	int client_port;
-	client_socket = accept(socket_file_descriptor, (struct sockaddr *)&client, &len);
+	client_socket = accept(fd, (struct sockaddr *)&client, &len);
 	if (client_socket < 0) {
 	printf("No connection accepted\n");
-	return -1;
+	isRunning = false;
 	} else {
 	 printf("Client connected\n");
 	}
@@ -78,8 +74,29 @@ int main(int argc, char *argv[])
 
 
 	printf("End of the listening TCP loop\n");
-	
 	close(client_socket);
+}
+
+/* TO-DO: Add htons or other combination to convert from network byte order to host or vice versa */
+int main(int argc, char *argv[])
+{
+	unsigned int port;
+	int socket_file_descriptor;
+	if (argc < 2) {
+	 printf("Port NOT provided, defaulting to %s \n", DEFAULT_PORT);
+	 port = atoi((char *) DEFAULT_PORT);
+	} else {
+	port = atoi(argv[1]);
+	}
+
+	printf("Port that was provided %d \n", port);
+	
+	socket_file_descriptor = init_server(port);
+
+	while(isRunning) {
+		main_loop(socket_file_descriptor);
+	}
+
 	close(socket_file_descriptor);
 	printf("It works\n");
 	return 0;
