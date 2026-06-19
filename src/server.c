@@ -78,6 +78,12 @@ void addClientToList(Client* client, Client* client_list[]) {
     	}
 }
 
+void requestUsername(Client* client) {
+
+	char buf[128] = "Podaj nazwe użytkownika\n";
+	send(client->fd, buf, 128, 0);
+}
+
 Client* createClientSocketAsync(int fd) {
 	//client TCP config and connection accept
 	struct sockaddr_in client;
@@ -101,8 +107,10 @@ Client* createClientSocketAsync(int fd) {
 	client_s->port = port;
 	inet_ntop(AF_INET, &client.sin_addr, client_s->ip, sizeof(client_s->ip));
 	printf("New connection from %s:%d\n", client_s->ip, port);
+	requestUsername(client_s);
 	return client_s;
 }
+
 
 void recvAndSendBackMessage(Client* client_list[]) {
 	//getting a message
@@ -131,7 +139,10 @@ void recvAndSendBackMessage(Client* client_list[]) {
 
 		if (client_poll_fd.revents & POLLIN) {
 			int conn = recv(client_list[i]->fd, buf, 511, 0);
-		
+			if (client_list[i]->name[0] == '\0') {
+				strcpy(client_list[i]->name, buf);
+				printf("Setting client name to %s\n", client_list[i]->name);
+			}
 			if (conn > 0) { 
 				printf("\nMessage from client: \n%s\n", buf);
 				printf("Client with descriptor id %d \n", client_list[i]->fd);
