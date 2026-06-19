@@ -1,5 +1,6 @@
 
 
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -11,17 +12,18 @@
 #include <poll.h>
 #include <errno.h>
 
-#define _GNU_SOURCE
 #include <poll.h>
 
 #define HOST "127.0.0.1"
 #define DEFAULT_PORT "9090"
+#define BACKLOG 10 // how many pending connections queue holds
 
 struct s_client {
 	int fd;
 	int port;
 	char ip[INET_ADDRSTRLEN];
 	char name[64];
+	struct sockaddr_in c_sockaddr;
 };
 
 typedef struct s_client Client;
@@ -70,40 +72,33 @@ void addClientToList(Client* client, Client* client_list[]) {
     	}
 }
 
-Client* createClientSocket(int fd) {
+Client* createClientSocketAsync(int fd) {
 	//client TCP config and connection accept
 	struct sockaddr_in client;
 	unsigned int len = sizeof(client);
+
+	struct pollfd pfd = { .fd = fd, .events = POLLIN };
+	int ret = poll(&pfd, 1, 1000);
+
+	if (ret < 0) { perror("poll"); }
+	if (ret == 0) { return NULL; }
+	if (!(pfd.revents & POLLIN)) { return NULL; }
+
+	
+	//This will only start if there is a connection
 	Client* client_s = (Client *)malloc(sizeof(struct s_client)); // mozliwe ze bedzie trzeba wyzerowac
 	memset(client_s, 0, sizeof(struct s_client));
+	client_s->fd = accept(fd, (struct sockaddr *)&client, &len); 
 
-	struct pollfd pfd = {
-		.fd = fd,
-		.events = POLLIN
-	};
-
-	
-	int ret = poll(&pfd, 1, 10000);
-
-	if (ret < 0) {
-		perror("poll");
-	}
-	if (ret == 0) {
-		printf("Brak nowych polaczen\n");
-	}
-	if (pfd.revents & POLLIN) {
-		client_s->fd = accept(fd, (struct sockaddr *)&client, &len);
-	}
-	
+	client_s->c_sockaddr = client;
+	int port = ntohs(client.sin_port);
+	client_s->port = port;
+	inet_ntop(AF_INET, &client.sin_addr, client_s->ip, sizeof(client_s->ip));
+	printf("New connection from %s:%d\n", client_s->ip, port);
 	return client_s;
 }
 
-
-void main_loop(int fd, Client* client_list[]) { 
-
-	Client* client = createClientSocket(fd);
-	addClientToList(client, client_list);
-	
+void recvAndSendBackMessage(Client* client_list[]) {
 	//getting a message
 	char buf[512] = {0};
 
@@ -111,29 +106,47 @@ void main_loop(int fd, Client* client_list[]) {
 
 	for (int i=0; i<10; i++) {
 
-		printf("Curennt filed descriptor %p\n", (Client *)client_list[i]);
 		memset(buf, 0, sizeof buf);
-		if (!client_list[i]) return;
-		int conn = recv(client_list[i]->fd, buf, 511, 0);
-		
-		if (conn > 0) { 
-			printf("\nMessage from client: \n%s\n", buf);
-			printf("Client with descriptor id %d \n", client_list[i]->fd);
-			send(client_list[i]->fd, buf, 511, 0);
-		} else if (errno == EINTR || conn == 0) {
-			printf("Connection closed\n");
-			close(client_list[i]->fd);
-			memset(client_list[i], 0, sizeof(struct s_client));
-		}
+		if (!client_list[i]) continue; // skips enty slots, keeps on going
 
+		/*I need to verify if client send something but with using poll()*/
+
+		struct pollfd client_poll_fd = {
+		.fd = client_list[i]->fd,
+		.events = POLLIN
+		};
+
+		int ret = poll(&client_poll_fd, 1, 1000);
+
+		if (ret < 0) {
+			perror("poll");
+		}
+		
+
+		if (client_poll_fd.revents & POLLIN) {
+			int conn = recv(client_list[i]->fd, buf, 511, 0);
+		
+			if (conn > 0) { 
+				printf("\nMessage from client: \n%s\n", buf);
+				printf("Client with descriptor id %d \n", client_list[i]->fd);
+				send(client_list[i]->fd, buf, conn, 0);
+			} else if (errno == EINTR || conn == 0) {
+				printf("Connection closed\n");
+				close(client_list[i]->fd);
+				memset(client_list[i], 0, sizeof(struct s_client));
+			}
+		}
 	}
 
-//	for (int i = 0; i<10; i++) {
-//		if (client_list[i] > 0) printf("Client connected nr %d, client file desc %d \n", i, client_list[i]->fd);
-//	}
-	//printf("End of the listening TCP loop\n");
 }
 
+
+void main_loop(int fd, Client* client_list[]) { 
+	Client* client = createClientSocketAsync(fd);
+	if (client != NULL)
+		addClientToList(client, client_list);
+	recvAndSendBackMessage(client_list);	
+}
 /* TO-DO: Add htons or other combination to convert from network byte order to host or vice versa */
 int main(int argc, char *argv[])
 {
