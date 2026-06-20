@@ -26,6 +26,13 @@ struct s_client {
 	struct sockaddr_in c_sockaddr;
 };
 
+struct s_message {
+	
+	char* username;
+	char* message;
+
+}; // TO-DO: Expand this later on to Hash-Table
+
 typedef struct s_client Client;
 
 
@@ -81,7 +88,7 @@ void addClientToList(Client* client, Client* client_list[]) {
 void requestUsername(Client* client) {
 
 	char buf[128] = "Podaj nazwe użytkownika\n";
-	send(client->fd, buf, 128, 0);
+	send(client->fd, buf, strlen(buf), 0);
 }
 
 Client* createClientSocketAsync(int fd) {
@@ -112,67 +119,74 @@ Client* createClientSocketAsync(int fd) {
 }
 
 
-void recvAndSendBackMessage(Client* client_list[]) {
+void handleClient(Client* client_list[], int i) {
 	//getting a message
 	char buf[512] = {0};
+	int conn = recv(client_list[i]->fd, buf, 511, 0);
+	
+	//check clients for message
+	
+	if (conn > 0) {
+		if (client_list[i]->name[0] == '\0') {
 
-	//check clients for messages
-
-	for (int i=0; i<10; i++) {
-
-		memset(buf, 0, sizeof buf);
-		if (!client_list[i]) continue; // skips enty slots, keeps on going
-
-		/*I need to verify if client send something but with using poll()*/
-
-		struct pollfd client_poll_fd = {
-		.fd = client_list[i]->fd,
-		.events = POLLIN
-		};
-
-		int ret = poll(&client_poll_fd, 1, 1000);
-
-		if (ret < 0) {
-			perror("poll");
+			strncpy(client_list[i]->name, buf, sizeof(client_list[i]->name) - 1);
+			client_list[i]->name[strcspn(client_list[i]->name, "\r\n")] = '\0';
+			printf("Client set name: %s\n", client_list[i]->name);
 		}
-		
-
-		if (client_poll_fd.revents & POLLIN) {
-			int conn = recv(client_list[i]->fd, buf, 511, 0);
-			if (client_list[i]->name[0] == '\0') {
-				strcpy(client_list[i]->name, buf);
-				printf("Setting client name to %s\n", client_list[i]->name);
-			}
-			if (conn > 0) { 
-				printf("\nMessage from client: \n%s\n", buf);
-				printf("Client with descriptor id %d \n", client_list[i]->fd);
-				send(client_list[i]->fd, buf, conn, 0);
-			} else if (errno == EINTR || conn == 0) {
-				printf("Connection closed\n");
-				close(client_list[i]->fd);
-				free(client_list[i]);
-				client_list[i] = NULL;
-			}
-		}
+	} else if (conn == 0 || errno != EINTR) {
+		printf("Client disconnected: %s\n", client_list[i]->ip);
+		close(client_list[i]->fd);
+		free(client_list[i]);
+		client_list[i] = NULL;
 	}
 
 }
 
 
-void main_loop(int fd, Client* client_list[]) { 
-	Client* client = createClientSocketAsync(fd);
-	if (client != NULL)
-		addClientToList(client, client_list);
-	recvAndSendBackMessage(client_list);	
+void main_loop(int fd, Client* client_list[]) {
+	struct pollfd fds[11]; // as I will server 10 clients + my server socket
+	memset(fds, 0, sizeof(fds));
+	
+	fds[0].fd = fd;
+	fds[0].events = POLLIN;
+	int nfds = 1;
+
+	// Maping clients to my array
+	int client_index[10];
+	for (int i = 0; i< 10; i++) {
+		if (client_list[i]) {
+			client_index[nfds - 1] = i;
+			fds[nfds].fd = client_list[i]->fd;
+			fds[nfds].events = POLLIN;
+			nfds++;
+		}
+	}
+
+	int ret = poll(fds, nfds, -1); // -1 allows to block until something happens
+	if (ret < 0) { perror("poll"); return; }
+	
+	if (fds[0].revents & POLLIN) {
+		Client* client = createClientSocketAsync(fd);
+		if (client != NULL)
+			addClientToList(client, client_list);
+	}
+
+	for (int j = 1; j < nfds; j++) {
+		if (fds[j].events & POLLIN) {
+
+			handleClient(client_list, client_index[j - 1]);
+		}
+	}
 }
 /* TO-DO: Add htons or other combination to convert from network byte order to host or vice versa */
 int main(int argc, char *argv[])
 {
 	Client* client_list[10] = {0};
-	memset(client_list, 0, sizeof(client_list));
 	unsigned int port;
-	
 	int socket_file_descriptor;
+	
+	memset(client_list, 0, sizeof(client_list));
+
 	if (argc < 2) {
 	 printf("Port NOT provided, defaulting to %s \n", DEFAULT_PORT);
 	 port = atoi((char *) DEFAULT_PORT);
