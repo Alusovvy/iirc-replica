@@ -90,7 +90,7 @@ void main_loop(int fd, Client* client_list[], HashTable* chatrooms) {
 
 	for (int j = 1; j < nfds; j++) {
 		if (fds[j].revents & POLLIN) {
-			handleClient(chatrooms, client_list, client_index[j - 1]);
+			handleClient(chatrooms, client_list[j - 1]);
 		}
 	}
 }
@@ -98,14 +98,12 @@ void main_loop(int fd, Client* client_list[], HashTable* chatrooms) {
 /* TO-DO: Add htons or other combination to convert from network byte order to host or vice versa */
 int main(int argc, char *argv[])
 {
-	Client* client_list[10] = {0};
 	HashTable* chatrooms = create_table();
-
+	HashTable* client_list = create_table();
 	unsigned int port;
 	int socket_file_descriptor;
 	
-	memset(client_list, 0, sizeof(client_list));
-
+	
 	if (argc < 2) {
 	 printf("Port NOT provided, defaulting to %s \n", DEFAULT_PORT);
 	 port = atoi((char *) DEFAULT_PORT);
@@ -122,6 +120,7 @@ int main(int argc, char *argv[])
 	}
 
 	close(socket_file_descriptor);
-	printf("It works\n");
+	table_destroy(chatrooms);
+	table_destroy(client_list);
 	return 0;
 }

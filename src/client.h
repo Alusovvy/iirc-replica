@@ -91,7 +91,7 @@ void sendMessageToChat(Client* client, char* buf) {
 		
 		if (chatroom->messages[i] == 0) {
 			Message* message = malloc(sizeof(struct s_message));
-			strncpy(message->username, username, sizeof(message->username) - 1);
+			strncpy(message->username, username, sizeof(message->username));
 			strncpy(message->content, buf, sizeof(message->content) - 1);
 			chatroom->messages[i] = message;
 			break;
@@ -99,16 +99,6 @@ void sendMessageToChat(Client* client, char* buf) {
 	}
 }
 
-
-void addClientToList(Client* client, Client* client_list[]) {
-
-	for (int i = 0; i<10; i++) {
-		if (client_list[i] == 0) {
-			client_list[i] = client;
-			break;
-		}
-    	}
-}
 
 void handleLogin(Client* client, char* buf) {
 	//offszotuje login komende
@@ -139,6 +129,8 @@ Chatroom* createChatroom(Client* client, HashTable* chatrooms, char* buf) {
 	}
 	
 	sendMessageToClient(client, "Chatroom created with name: ", name);
+
+	return createdChat;
 }
 
 void joinChat(HashTable* chatrooms, Client* client, char* buf) {
@@ -182,43 +174,46 @@ Client* createClientSocketAsync(int fd) {
 	return client_s;
 }
 
-void handleClient(HashTable* chatrooms, Client* client_list[], int i) {
+void handleClient(HashTable* chatrooms, Client* client) {
 	//getting a message
 	char buf[512] = {0};
-	int conn = recv(client_list[i]->fd, buf, 511, 0);
+	int conn = recv(client->fd, buf, 511, 0);
 	
 	//check clients for message
 	
 	if (conn > 0) {
-		if (client_list[i]->isLoggedIn) {
+		if (client->isLoggedIn) {
 			switch(parseCommand((char*)&buf[0])) {
 				case (MESSAGE_HISTORY): 
 					printf("Command was '/history'\n");
 					break;
 				case (JOIN_CHAT): 
 					printf("Command was '/join'\n");
-					joinChat(chatrooms, client_list[i], buf);
+					joinChat(chatrooms, client, buf);
 					break;
 				case (CREATE_CHAT): 
 					printf("Command was '/create'\n");
-					createChatroom(client_list[i], chatrooms, buf);
+					createChatroom(client, chatrooms, buf);
 					break;
 				case (SHOW_DETAILS):
 					printf("Command was '/details'\n");
-					sendMessageToClient(client_list[i], client_list[i]->name, "");
+					sendMessageToClient(client, client->name, "");
 					break;
 				case (UNKNOWN):
-					if (client_list[i]->activeChat) {
-						sendMessageToChat(client_list[i], buf);
+					if (client->activeChat) {
+						sendMessageToChat(client, buf);
 					}
 					printf("Command was UNKNOWN\n");
+					break;
+				case (LOGIN_COMMAND):
+					sendMessageToClient(client, "You are already logged in, as a :", client->name);
 					break;
 			}
 		} else {
 			switch(parseCommand((char*)&buf[0])) {
 				case (LOGIN_COMMAND): 
 					printf("Command was '/login'\n");
-					handleLogin(client_list[i], buf);
+					handleLogin(client, buf);
 					break;
 				case (MESSAGE_HISTORY):
 				case (JOIN_CHAT): 
@@ -226,15 +221,14 @@ void handleClient(HashTable* chatrooms, Client* client_list[], int i) {
 				case (SHOW_DETAILS):
 				case (UNKNOWN):
 					printf("User no logged in!\n");
-					send(client_list[i]->fd, "User not logged in\n", strlen("User not logged in"), 0);
+					send(client->fd, "User not logged in\n", strlen("User not logged in"), 0);
 			}
 		}
 	
 	} else if (conn == 0 || errno != EINTR) {
-		printf("Client disconnected: %s\n", client_list[i]->ip);
-		close(client_list[i]->fd);
-		free(client_list[i]);
-		client_list[i] = NULL;
+		printf("Client disconnected: %s\n", client->ip);
+		close(client->fd);
+		free(client);
 	}
 
 }
