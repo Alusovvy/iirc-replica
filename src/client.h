@@ -2,6 +2,7 @@
 #pragma once
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -53,7 +54,7 @@ struct s_client {
 	char ip[INET_ADDRSTRLEN];
 	char name[64];
 	bool isLoggedIn;
-	Chatroom* activeChat;
+	char* activeChat;
 	
 	struct s_message messages[128];
 	struct sockaddr_in c_sockaddr;
@@ -85,11 +86,44 @@ void sendMessageToClient(Client* client, char* message, char* add_info) {
 
 }
 
+int timestamp_curr(char *buf, size_t size) {
+	time_t now = time(NULL);
+	struct tm tm_now;
+	localtime_r(&now, &tm_now);
+
+	return strftime(buf, size, "%Y-%m-%d %H:%M:%S", &tm_now) != 0;
+	
+}
+
+void sendNewChatMessage(Chatroom* chatroom) { // TO-DO this can be changed to pointers later
+	printf("[DEBUG] chatroom ptr = %p\n", (void*)chatroom);   // ← prints BEFORE the deref
+	printf("[DEBUG] chatroom->members ptr = %p\n", (void*)chatroom->members);   // ← prints BEFORE the deref
+    	printf("[DEBUG] chatroom->members->space = %zu\n", chatroom->members->space);
+    	printf("[DEBUG] chatroom->members->size = %zu\n", chatroom->members->size);
+	char* keys[16] = {0};
+	int members_count = table_get_keys(chatroom->members, keys);
+	printf("Debug d");	
+	for (int i = 0; i < members_count; i++) {
+			printf("Debug");
+		Client* client = table_get(clients, keys[i]);
+		char senderInfo[256];
+		char time_stamp[64];
+		timestamp_curr(time_stamp, sizeof(time_stamp));
+		for (int j = 0; i < 512; j++) {
+			if (!chatroom->messages[j]) continue;
+			snprintf(senderInfo, sizeof(senderInfo), "%s %s:",  time_stamp, chatroom->messages[j]->username);
+			printf("The client to send message to is %s\n", client->name);
+			sendMessageToClient(client, senderInfo, chatroom->messages[j]->content);  
+		}		
+
+	}
+
+} 
 
 void sendMessageToChat(Client* client, char* buf) {
 	char* username = client->name;
-	Chatroom* chatroom = client->activeChat;
-
+	Chatroom* chatroom = table_get(chatrooms, client->activeChat);
+	printf("[DEBUG] Chatroom pointer by activeChat %p\n", chatroom);
 	for (int i = 0; i<128; i++) {
 		
 		if (chatroom->messages[i] == 0) {
@@ -100,6 +134,7 @@ void sendMessageToChat(Client* client, char* buf) {
 			break;
 		}
 	}
+	sendNewChatMessage(chatroom);
 }
 
 
@@ -124,7 +159,8 @@ Chatroom* createChatroom(Client* client, char* buf) {
 	Chatroom* chat = malloc(sizeof(struct s_chat_room));
 	chat->members = create_table();
 	strncpy(chat->name, name, sizeof(chat->name) - 1);
-	table_set((ht_table*)chatrooms, name, chat);
+	chat->name[sizeof(chat->name) - 1] = '\0';
+	table_set(chatrooms, name, chat);
 	Chatroom* createdChat = table_get((ht_table*)chatrooms, name);
 
 	if (!createdChat) {
@@ -132,15 +168,12 @@ Chatroom* createChatroom(Client* client, char* buf) {
 		return NULL;
 	}
 	
-	sendMessageToClient(client, "Chatroom created with name: ", name);
-	char** keys = table_get_keys(chatrooms);
-
-	if (keys == NULL) {
-		printf("[ERROR] Allocaiton for get keys for chatrooms in method creteChatroom failed\n");
-	}
+	sendMessageToClient(client, "Chatroom created with name: ", createdChat->name);
+	char* keys[16] = {0};
+	table_get_keys(chatrooms, keys);
 
 	printf("[INFO] Available chatrooms: \n");
-	for (size_t i = 0; i<chatrooms->size; i++) {
+	for (int i = 0; i < chatrooms->size; i++) {
 		printf("[INFO] Chatname: %s\n", keys[i]);
 	}
 	return createdChat;
@@ -154,7 +187,7 @@ void joinChat(Client* client, char* buf) {
 		sendMessageToClient(client, "Selected chatroom does not exist for name: ", chatroom_name);
 	}
 
-	client->activeChat = chatroom;
+	client->activeChat = chatroom->name;
 	table_set(chatroom->members, client->name, client);
 
 	sendMessageToClient(client, "You have joined  the chatroom: ", chatroom->name);

@@ -11,7 +11,7 @@
 #include "c_datastructures.h"
 
 typedef struct {
-    const char *key;
+    char *key;
     void *value;
 } ht_entry;
 
@@ -51,15 +51,16 @@ void table_destroy(ht_table* table) {
 	free(table);
 }
 
-char** table_get_keys(ht_table* table) {
-	char** keys = malloc(table->size * sizeof *keys);
-	if (keys == NULL) {
-		return NULL;
-	}
+size_t table_get_keys(ht_table* table, char* key_arr[]) {
+	size_t count = 0;
 	for (size_t i = 0; i < table->size; i++) {
-		keys[i] = table->entries[i].key;
+		if (table->entries[i].key) {
+			printf("Key that will be passed in get keys: %s\n", table->entries[i].key);
+			key_arr[count++] = table->entries[i].key;
+		}
 	}	
-	return keys;
+	printf("Will pass this ehheeh");
+	return count;
 }
 
 #define FNV_OFFSET 14695981039346656037UL
@@ -83,13 +84,14 @@ void* table_get(ht_table* table, const char* key) {
 				if (strcmp(key, table->entries[index].key) == 0) {
 					return table->entries[index].value;
 			}
-		}
+		
 
 		index++;
 
 		if (index >= table->space) {
 			index = 0;
 		}
+	}
 
 	return NULL;
 }
