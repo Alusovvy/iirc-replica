@@ -21,6 +21,9 @@
 
 bool isRunning= true;
 
+HashTable* chatrooms = NULL;
+HashTable* clients = NULL;
+
 int init_server(unsigned int port) {
 
 	struct sockaddr_in sock_addr;
@@ -69,8 +72,8 @@ void main_loop(int fd, Client* client_list[], HashTable* chatrooms) {
 	int nfds = 1;
 
 	// Maping clients to my array
-	int client_index[10];
-	for (int i = 0; i< 10; i++) {
+	int client_index[16];
+	for (int i = 0; i< 16; i++) {
 		if (client_list[i]) {
 			client_index[nfds - 1] = i;
 			fds[nfds].fd = client_list[i]->fd;
@@ -85,21 +88,25 @@ void main_loop(int fd, Client* client_list[], HashTable* chatrooms) {
 	if (fds[0].revents & POLLIN) {
 		Client* client = createClientSocketAsync(fd);
 		if (client != NULL)
-			addClientToList(client, client_list);
+			for(int i = 0; i<16; i++) {
+				if (client_list[i] == 0) client_list[i] = client;
+				break;
+			}
 	}
 
 	for (int j = 1; j < nfds; j++) {
 		if (fds[j].revents & POLLIN) {
-			handleClient(chatrooms, client_list[j - 1]);
+			handleClient(client_list[client_index[j - 1]]);
 		}
 	}
 }
 
 /* TO-DO: Add htons or other combination to convert from network byte order to host or vice versa */
 int main(int argc, char *argv[])
-{
-	HashTable* chatrooms = create_table();
-	HashTable* client_list = create_table();
+{	chatrooms = create_table();
+	clients = create_table();
+
+	Client* client_list[16] = {0};
 	unsigned int port;
 	int socket_file_descriptor;
 	
@@ -121,6 +128,5 @@ int main(int argc, char *argv[])
 
 	close(socket_file_descriptor);
 	table_destroy(chatrooms);
-	table_destroy(client_list);
 	return 0;
 }

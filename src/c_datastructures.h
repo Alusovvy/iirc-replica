@@ -1,5 +1,6 @@
 #ifndef DATA_STRUCTURES
 #define DATA_STRUCTURES
+#pragma once
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -48,6 +49,17 @@ void table_destroy(ht_table* table) {
 
 	free(table->entries);
 	free(table);
+}
+
+char** table_get_keys(ht_table* table) {
+	char** keys = malloc(table->size * sizeof *keys);
+	if (keys == NULL) {
+		return NULL;
+	}
+	for (size_t i = 0; i < table->size; i++) {
+		keys[i] = table->entries[i].key;
+	}	
+	return keys;
 }
 
 #define FNV_OFFSET 14695981039346656037UL

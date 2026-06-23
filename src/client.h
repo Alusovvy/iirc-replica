@@ -17,6 +17,9 @@
 #define DEFAULT_PORT "9090"
 #define BACKLOG 10 // how many pending connections queue holds
 
+extern HashTable* chatrooms;
+extern HashTable* clients;
+
 typedef enum {
 	LOGIN_COMMAND,
 	MESSAGE_HISTORY,
@@ -39,7 +42,7 @@ typedef struct s_message Message;
 struct s_chat_room {
 	char name[64];
 	struct s_message* messages[512];
-	//add structure that holds details about chat users
+	HashTable* members;
 };
 
 typedef struct s_chat_room Chatroom;
@@ -116,9 +119,10 @@ void displayCommands(Client* client) {
 	send(client->fd, buf, strlen(buf), 0);
 }
 
-Chatroom* createChatroom(Client* client, HashTable* chatrooms, char* buf) {
+Chatroom* createChatroom(Client* client, char* buf) {
 	char* name = buf + strlen("/create ");
 	Chatroom* chat = malloc(sizeof(struct s_chat_room));
+	chat->members = create_table();
 	strncpy(chat->name, name, sizeof(chat->name) - 1);
 	table_set((ht_table*)chatrooms, name, chat);
 	Chatroom* createdChat = table_get((ht_table*)chatrooms, name);
@@ -129,20 +133,30 @@ Chatroom* createChatroom(Client* client, HashTable* chatrooms, char* buf) {
 	}
 	
 	sendMessageToClient(client, "Chatroom created with name: ", name);
+	char** keys = table_get_keys(chatrooms);
 
+	if (keys == NULL) {
+		printf("[ERROR] Allocaiton for get keys for chatrooms in method creteChatroom failed\n");
+	}
+
+	printf("[INFO] Available chatrooms: \n");
+	for (size_t i = 0; i<chatrooms->size; i++) {
+		printf("[INFO] Chatname: %s\n", keys[i]);
+	}
 	return createdChat;
 }
 
-void joinChat(HashTable* chatrooms, Client* client, char* buf) {
+void joinChat(Client* client, char* buf) {
 	char* chatroom_name = buf + strlen("/join ");
 
 	Chatroom* chatroom = table_get(chatrooms, chatroom_name);
-
 	if (!chatroom) {
 		sendMessageToClient(client, "Selected chatroom does not exist for name: ", chatroom_name);
 	}
 
 	client->activeChat = chatroom;
+	table_set(chatroom->members, client->name, client);
+
 	sendMessageToClient(client, "You have joined  the chatroom: ", chatroom->name);
 }
 
@@ -174,7 +188,7 @@ Client* createClientSocketAsync(int fd) {
 	return client_s;
 }
 
-void handleClient(HashTable* chatrooms, Client* client) {
+void handleClient(Client* client) {
 	//getting a message
 	char buf[512] = {0};
 	int conn = recv(client->fd, buf, 511, 0);
@@ -189,11 +203,11 @@ void handleClient(HashTable* chatrooms, Client* client) {
 					break;
 				case (JOIN_CHAT): 
 					printf("Command was '/join'\n");
-					joinChat(chatrooms, client, buf);
+					joinChat(client, buf);
 					break;
 				case (CREATE_CHAT): 
 					printf("Command was '/create'\n");
-					createChatroom(client, chatrooms, buf);
+					createChatroom(client, buf);
 					break;
 				case (SHOW_DETAILS):
 					printf("Command was '/details'\n");
