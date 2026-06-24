@@ -1,17 +1,17 @@
 
 CC = gcc
-CFLAGS=-Wall -O2 -std=c2x
-LDFLAGS=
+CFLAGS = -Wall -Wextra -O2 -std=c2x
+SRCS = $(wildcard src/*.c)
+OBJS = $(SRCS:.c=.o)
+TARGET = server
 
-SRC = src/server.c
-OBJ = server.o
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS) $(OBJS) -o $(TARGET)
 
-all: clean server
-	
-server:
-	$(CC) $(CFLAGS) $(SRC) -o server
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f *.o server
+	rm -f src/*.o $(TARGET)
 
 .PHONY: all clean

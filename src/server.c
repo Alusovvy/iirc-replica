@@ -9,11 +9,9 @@
 #include <netdb.h>
 #include <poll.h>
 #include <errno.h>
-#include "client.h"
 
-#ifndef SUPER_HEADER
 #include "c_datastructures.h"
-#endif
+#include "client.h"
 
 #define HOST "127.0.0.1"
 #define DEFAULT_PORT "9090"
